@@ -1,0 +1,110 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: #f1f2ee;
+  color: #283829;
+  font:
+    16px Arial,
+    "Apple SD Gothic Neo",
+    sans-serif;
+}
+main {
+  max-width: 550px;
+  margin: auto;
+  padding: 32px 24px;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #ccd4c4;
+  padding-bottom: 22px;
+}
+header strong {
+  font-size: 38px;
+  letter-spacing: -3px;
+}
+sup {
+  font-size: 12px;
+}
+header span {
+  font: 11px monospace;
+  letter-spacing: 1px;
+}
+h1 {
+  font-size: 30px;
+  margin-top: 40px;
+  letter-spacing: -1px;
+}
+p {
+  font-size: 14px;
+  line-height: 1.8;
+  color: #697760;
+}
+#owner {
+  font-size: 12px;
+  margin: 28px 0 12px;
+}
+article {
+  border: 1px solid #ccd4c4;
+  border-radius: 12px;
+  padding: 22px;
+  margin-bottom: 12px;
+  background: #fafcf6;
+}
+article b {
+  font: 32px monospace;
+  overflow-wrap: anywhere;
+}
+article p {
+  margin: 5px 0 15px;
+}
+article span,
+article time {
+  display: block;
+  font-size: 12px;
+  margin: 8px 0;
+  color: #697760;
+}
+a {
+  display: block;
+  text-align: center;
+  background: #344837;
+  color: white;
+  text-decoration: none;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 30px 0 15px;
+}
+button {
+  border: 0;
+  background: transparent;
+  color: #697760;
+  font: 13px inherit;
+  padding: 10px 0;
+  cursor: pointer;
+}
+small {
+  display: block;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #697760;
+}
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #1d231e;
+    color: #e0e6d9;
+  }
+  article {
+    background: #283429;
+    border-color: #495442;
+  }
+  p,
+  small,
+  article span,
+  article time {
+    color: #a5b29b;
+  }
+}

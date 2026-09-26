@@ -1,9 +1,362 @@
 "use client";
-import {useState} from "react";
-import {Download,Volume2,Smartphone,LogOut} from "lucide-react";
-import {toast} from "sonner";
-import {Toggle,Choice} from "./common";
-import {api,beep,unlockAudio,clearOffline} from "@/lib/ppi/client";
-import {formatPager} from "@/lib/ppi/shared";
-import type {Mutate} from "./manage";
-export default function Preferences({data,mutate,busy,onDelete,onTheme,theme,install}:{data:any;mutate:Mutate;busy:boolean;onDelete:()=>void;onTheme:(v:string)=>void;theme:string;install:()=>void}){const s=data.settings;const [name,setName]=useState(data.user.username),[start,setStart]=useState(s.dnd_start),[end,setEnd]=useState(s.dnd_end),[tz,setTz]=useState(s.timezone);const [pushBusy,setPushBusy]=useState(false);const save=(key:string,value:any)=>void mutate("settings","PATCH",{[key]:value});async function push(enable:boolean){if(!enable){await mutate("settings","PATCH",{push_notification:false},"모든 기기의 푸시 알림을 껐습니다.");return}if(!("serviceWorker"in navigator)||!("PushManager"in window)||!("Notification"in window)){toast.info("이 브라우저는 푸시 알림을 지원하지 않습니다. iPhone에서는 Safari의 ‘홈 화면에 추가’ 후 앱을 열어 주세요.");return}setPushBusy(true);try{const permission=await Notification.requestPermission();if(permission!=="granted")throw new Error("알림을 허용해야 받을 수 있어요. 브라우저의 사이트 설정을 확인해 주세요.");const registration=await navigator.serviceWorker.ready;const {publicKey}=await api("push-key");const bytes=Uint8Array.from(atob(publicKey.replace(/-/g,"+").replace(/_/g,"/")),c=>c.charCodeAt(0));const sub=await registration.pushManager.getSubscription()||await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:bytes});await mutate("push","POST",sub.toJSON(),"이 기기에 알림을 연결했습니다.")}catch(e){toast.error((e as Error).message)}finally{setPushBusy(false)}}async function exportData(){try{const d=await api("export"),blob=new Blob([JSON.stringify(d,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="ppi-backup-"+new Date().toISOString().slice(0,10)+".json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}catch(e){toast.error((e as Error).message)}}async function logout(){try{const r=await navigator.serviceWorker?.getRegistration();const sub=await r?.pushManager?.getSubscription();if(sub){await api("push","DELETE",{endpoint:sub.endpoint});await sub.unsubscribe()}await clearOffline();window.location.href="/signout-with-chatgpt?return_to=/"}catch(e){toast.error("로그아웃 준비에 실패했습니다. 연결을 확인하고 다시 눌러 주세요.")}}return <section className="preferences"><div className="section-heading"><div><span className="eyebrow">MAKE IT YOURS</span><h2>삐삐 설정</h2></div></div><fieldset><legend>나의 프로필</legend><form className="inline-form" onSubmit={e=>{e.preventDefault();void mutate("profile","PATCH",{username:name},"이름을 저장했습니다.")}}><input aria-label="프로필 이름" value={name} onChange={e=>setName(e.target.value)} maxLength={30} required/><button className="secondary" disabled={busy}>저장</button></form><Toggle label="상태 공개" value={data.user.status_public} onChange={v=>void mutate("profile","PATCH",{status_public:v})} disabled={busy}/></fieldset><fieldset><legend>소리와 알림</legend><Toggle label="삐삐 소리" note="페이지를 한 번 누르면 소리가 활성화돼요." value={s.sound} onChange={v=>{void unlockAudio();save("sound",v)}} disabled={busy}/><button className="text-button" onClick={async()=>{await unlockAudio();beep()}}><Volume2 size={15}/>소리 들어보기</button><Toggle label="진동" note="지원하는 모바일 기기에서 작동합니다." value={s.vibration} onChange={v=>save("vibration",v)} disabled={busy}/><Toggle label="푸시 알림" note="앱을 닫아도 신호를 받아요. 기기별 연결이 필요합니다." value={s.push_notification} onChange={v=>void push(v)} disabled={busy||pushBusy}/>{!!s.push_notification&&<button className="text-button" onClick={()=>void push(true)} disabled={pushBusy}>이 기기에 알림 연결</button>}<Toggle label="알림에 메시지 내용 표시" note="끄면 새 호출이 왔다는 사실만 표시합니다." value={s.show_message_in_notification} onChange={v=>save("show_message_in_notification",v)} disabled={busy}/></fieldset><fieldset><legend>조용히 쉬는 시간</legend><Toggle label="방해 금지" note="호출은 저장되고 소리·진동·푸시는 쉬어갑니다." value={s.dnd_enabled} onChange={v=>save("dnd_enabled",v)} disabled={busy}/><form className="form-stack" onSubmit={e=>{e.preventDefault();void mutate("settings","PATCH",{dnd_start:start,dnd_end:end,timezone:tz},"방해 금지 시간을 저장했습니다.")}}><div className="two-inputs"><label>시작<input aria-label="방해 금지 시작" type="time" value={start} required onChange={e=>setStart(e.target.value)}/></label><label>종료<input aria-label="방해 금지 종료" type="time" value={end} required onChange={e=>setEnd(e.target.value)}/></label></div><label>시간대<input aria-label="방해 금지 시간대" value={tz} onChange={e=>setTz(e.target.value)} placeholder="Asia/Seoul" required/></label><div className="row-between"><small>시작과 종료가 같으면 하루 종일 적용됩니다.</small><button className="secondary" disabled={busy}>시간 저장</button></div></form></fieldset><fieldset><legend>수신과 화면</legend><Toggle label="숫자 암호 자동 해석" value={s.auto_decode} onChange={v=>save("auto_decode",v)} disabled={busy}/><Toggle label="로그인한 사용자에게만 호출 받기" value={!s.receive_from_guests} onChange={v=>save("receive_from_guests",!v)} disabled={busy}/><div className="toggle-row"><b>화면 테마</b><Choice label="화면 테마" value={theme} onChange={onTheme} options={[{value:"system",label:"기기 설정"},{value:"light",label:"라이트"},{value:"dark",label:"다크"}]}/></div><button className="secondary" onClick={install}><Smartphone size={16}/>홈 화면에 설치</button></fieldset><fieldset><legend>차단한 발신자</legend>{data.blocks.length?data.blocks.map((b:any)=><div className="row-between blocked-row" key={b.blocked_key}><span>{b.pager_number?formatPager(b.pager_number):b.blocked_user_id?"가입 사용자":"비회원 발신자"}</span><button className="text-button" disabled={busy} onClick={()=>void mutate("blocks","DELETE",{blocked_key:b.blocked_key},"차단을 해제했습니다.")}>차단 해제</button></div>):<p className="muted-text">차단한 발신자가 없습니다.</p>}<p className="fineprint">비회원은 네트워크 기준으로 차단합니다. 다른 네트워크를 이용한 호출까지 막을 수는 없습니다.</p></fieldset><fieldset><legend>데이터와 계정</legend><div className="account-actions"><button className="secondary" onClick={()=>void exportData()}><Download size={16}/>내 데이터 내보내기</button><button className="secondary" onClick={()=>void logout()}><LogOut size={16}/>로그아웃</button><button className="text-button danger" disabled={busy} onClick={onDelete}>계정 삭제</button></div></fieldset></section>}
+import { useState } from "react";
+import { Download, Volume2, Smartphone, LogOut } from "lucide-react";
+import { toast } from "sonner";
+import { Toggle, Choice } from "./common";
+import { api, beep, unlockAudio, clearOffline } from "@/lib/ppi/client";
+import { formatPager } from "@/lib/ppi/shared";
+import type { Mutate } from "./manage";
+export default function Preferences({
+  data,
+  mutate,
+  busy,
+  onDelete,
+  onTheme,
+  theme,
+  install,
+}: {
+  data: any;
+  mutate: Mutate;
+  busy: boolean;
+  onDelete: () => void;
+  onTheme: (v: string) => void;
+  theme: string;
+  install: () => void;
+}) {
+  const s = data.settings;
+  const [name, setName] = useState(data.user.username),
+    [start, setStart] = useState(s.dnd_start),
+    [end, setEnd] = useState(s.dnd_end),
+    [tz, setTz] = useState(s.timezone);
+  const [pushBusy, setPushBusy] = useState(false);
+  const save = (key: string, value: any) =>
+    void mutate("settings", "PATCH", { [key]: value });
+  async function push(enable: boolean) {
+    if (!enable) {
+      await mutate(
+        "settings",
+        "PATCH",
+        { push_notification: false },
+        "모든 기기의 푸시 알림을 껐습니다.",
+      );
+      return;
+    }
+    if (
+      !("serviceWorker" in navigator) ||
+      !("PushManager" in window) ||
+      !("Notification" in window)
+    ) {
+      toast.info(
+        "이 브라우저는 푸시 알림을 지원하지 않습니다. iPhone에서는 Safari의 ‘홈 화면에 추가’ 후 앱을 열어 주세요.",
+      );
+      return;
+    }
+    setPushBusy(true);
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted")
+        throw new Error(
+          "알림을 허용해야 받을 수 있어요. 브라우저의 사이트 설정을 확인해 주세요.",
+        );
+      const registration = await navigator.serviceWorker.ready;
+      const { publicKey } = await api("push-key");
+      const bytes = Uint8Array.from(
+        atob(publicKey.replace(/-/g, "+").replace(/_/g, "/")),
+        (c) => c.charCodeAt(0),
+      );
+      const sub =
+        (await registration.pushManager.getSubscription()) ||
+        (await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: bytes,
+        }));
+      await mutate(
+        "push",
+        "POST",
+        sub.toJSON(),
+        "이 기기에 알림을 연결했습니다.",
+      );
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setPushBusy(false);
+    }
+  }
+  async function exportData() {
+    try {
+      const d = await api("export"),
+        blob = new Blob([JSON.stringify(d, null, 2)], {
+          type: "application/json",
+        }),
+        url = URL.createObjectURL(blob),
+        a = document.createElement("a");
+      a.href = url;
+      a.download =
+        "ppi-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+  async function logout() {
+    try {
+      const r = await navigator.serviceWorker?.getRegistration();
+      const sub = await r?.pushManager?.getSubscription();
+      if (sub) {
+        await api("push", "DELETE", { endpoint: sub.endpoint });
+        await sub.unsubscribe();
+      }
+      await clearOffline();
+      window.location.href = "/signout-with-chatgpt?return_to=/";
+    } catch (e) {
+      toast.error(
+        "로그아웃 준비에 실패했습니다. 연결을 확인하고 다시 눌러 주세요.",
+      );
+    }
+  }
+  return (
+    <section className="preferences">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">MAKE IT YOURS</span>
+          <h2>삐삐 설정</h2>
+        </div>
+      </div>
+      <fieldset>
+        <legend>나의 프로필</legend>
+        <form
+          className="inline-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void mutate(
+              "profile",
+              "PATCH",
+              { username: name },
+              "이름을 저장했습니다.",
+            );
+          }}
+        >
+          <input
+            aria-label="프로필 이름"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={30}
+            required
+          />
+          <button className="secondary" disabled={busy}>
+            저장
+          </button>
+        </form>
+        <Toggle
+          label="상태 공개"
+          value={data.user.status_public}
+          onChange={(v) =>
+            void mutate("profile", "PATCH", { status_public: v })
+          }
+          disabled={busy}
+        />
+      </fieldset>
+      <fieldset>
+        <legend>소리와 알림</legend>
+        <Toggle
+          label="삐삐 소리"
+          note="페이지를 한 번 누르면 소리가 활성화돼요."
+          value={s.sound}
+          onChange={(v) => {
+            void unlockAudio();
+            save("sound", v);
+          }}
+          disabled={busy}
+        />
+        <button
+          className="text-button"
+          onClick={async () => {
+            await unlockAudio();
+            beep();
+          }}
+        >
+          <Volume2 size={15} />
+          소리 들어보기
+        </button>
+        <Toggle
+          label="진동"
+          note="지원하는 모바일 기기에서 작동합니다."
+          value={s.vibration}
+          onChange={(v) => save("vibration", v)}
+          disabled={busy}
+        />
+        <Toggle
+          label="푸시 알림"
+          note="앱을 닫아도 신호를 받아요. 기기별 연결이 필요합니다."
+          value={s.push_notification}
+          onChange={(v) => void push(v)}
+          disabled={busy || pushBusy}
+        />
+        {!!s.push_notification && (
+          <button
+            className="text-button"
+            onClick={() => void push(true)}
+            disabled={pushBusy}
+          >
+            이 기기에 알림 연결
+          </button>
+        )}
+        <Toggle
+          label="알림에 메시지 내용 표시"
+          note="끄면 새 호출이 왔다는 사실만 표시합니다."
+          value={s.show_message_in_notification}
+          onChange={(v) => save("show_message_in_notification", v)}
+          disabled={busy}
+        />
+      </fieldset>
+      <fieldset>
+        <legend>조용히 쉬는 시간</legend>
+        <Toggle
+          label="방해 금지"
+          note="호출은 저장되고 소리·진동·푸시는 쉬어갑니다."
+          value={s.dnd_enabled}
+          onChange={(v) => save("dnd_enabled", v)}
+          disabled={busy}
+        />
+        <form
+          className="form-stack"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void mutate(
+              "settings",
+              "PATCH",
+              { dnd_start: start, dnd_end: end, timezone: tz },
+              "방해 금지 시간을 저장했습니다.",
+            );
+          }}
+        >
+          <div className="two-inputs">
+            <label>
+              시작
+              <input
+                aria-label="방해 금지 시작"
+                type="time"
+                value={start}
+                required
+                onChange={(e) => setStart(e.target.value)}
+              />
+            </label>
+            <label>
+              종료
+              <input
+                aria-label="방해 금지 종료"
+                type="time"
+                value={end}
+                required
+                onChange={(e) => setEnd(e.target.value)}
+              />
+            </label>
+          </div>
+          <label>
+            시간대
+            <input
+              aria-label="방해 금지 시간대"
+              value={tz}
+              onChange={(e) => setTz(e.target.value)}
+              placeholder="Asia/Seoul"
+              required
+            />
+          </label>
+          <div className="row-between">
+            <small>시작과 종료가 같으면 하루 종일 적용됩니다.</small>
+            <button className="secondary" disabled={busy}>
+              시간 저장
+            </button>
+          </div>
+        </form>
+      </fieldset>
+      <fieldset>
+        <legend>수신과 화면</legend>
+        <Toggle
+          label="숫자 암호 자동 해석"
+          value={s.auto_decode}
+          onChange={(v) => save("auto_decode", v)}
+          disabled={busy}
+        />
+        <Toggle
+          label="로그인한 사용자에게만 호출 받기"
+          value={!s.receive_from_guests}
+          onChange={(v) => save("receive_from_guests", !v)}
+          disabled={busy}
+        />
+        <div className="toggle-row">
+          <b>화면 테마</b>
+          <Choice
+            label="화면 테마"
+            value={theme}
+            onChange={onTheme}
+            options={[
+              { value: "system", label: "기기 설정" },
+              { value: "light", label: "라이트" },
+              { value: "dark", label: "다크" },
+            ]}
+          />
+        </div>
+        <button className="secondary" onClick={install}>
+          <Smartphone size={16} />홈 화면에 설치
+        </button>
+      </fieldset>
+      <fieldset>
+        <legend>차단한 발신자</legend>
+        {data.blocks.length ? (
+          data.blocks.map((b: any) => (
+            <div className="row-between blocked-row" key={b.blocked_key}>
+              <span>
+                {b.pager_number
+                  ? formatPager(b.pager_number)
+                  : b.blocked_user_id
+                    ? "가입 사용자"
+                    : "비회원 발신자"}
+              </span>
+              <button
+                className="text-button"
+                disabled={busy}
+                onClick={() =>
+                  void mutate(
+                    "blocks",
+                    "DELETE",
+                    { blocked_key: b.blocked_key },
+                    "차단을 해제했습니다.",
+                  )
+                }
+              >
+                차단 해제
+              </button>
+            </div>
+          ))
+        ) : (
+          <p className="muted-text">차단한 발신자가 없습니다.</p>
+        )}
+        <p className="fineprint">
+          비회원은 네트워크 기준으로 차단합니다. 다른 네트워크를 이용한 호출까지
+          막을 수는 없습니다.
+        </p>
+      </fieldset>
+      <fieldset>
+        <legend>데이터와 계정</legend>
+        <div className="account-actions">
+          <button className="secondary" onClick={() => void exportData()}>
+            <Download size={16} />내 데이터 내보내기
+          </button>
+          <button className="secondary" onClick={() => void logout()}>
+            <LogOut size={16} />
+            로그아웃
+          </button>
+          <button
+            className="text-button danger"
+            disabled={busy}
+            onClick={onDelete}
+          >
+            계정 삭제
+          </button>
+        </div>
+      </fieldset>
+    </section>
+  );
+}
